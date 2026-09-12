@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Smart Note</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f7f6; font-family: 'Sarabun', sans-serif; }
+    .hidden { display: none !important; }
+    .task-card { transition: all 0.3s ease; }
+    .task-completed { text-decoration: line-through; opacity: 0.5; }
+  </style>
+</head>
+<body>
+
+  <!-- หน้า Login -->
+  <div id="loginScreen" class="container d-flex flex-column justify-content-center align-items-center vh-100">
+    <div class="card p-4 shadow-sm text-center" style="width: 100%; max-width: 350px;">
+      <h3 class="mb-4">🔒 My Smart Note</h3>
+      <input type="password" id="pinInput" class="form-control text-center fs-3 mb-3" placeholder="ระบุ PIN" maxlength="6">
+      <button onclick="verifyPin()" id="loginBtn" class="btn btn-primary w-100 fs-5">เข้าสู่ระบบ</button>
+      <div id="loginAlert" class="text-danger mt-2 hidden"></div>
+    </div>
+  </div>
+
+  <!-- หน้า Dashboard -->
+  <div id="dashboardScreen" class="container py-4 hidden" style="max-width: 600px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4>📝 รายการจดบันทึก</h4>
+      <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
+    </div>
+
+    <!-- ฟอร์มเพิ่มงาน -->
+    <div class="card p-3 mb-4 shadow-sm border-primary">
+      <textarea id="taskDetail" class="form-control mb-2" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label" style="font-size: 0.8rem;">วันที่นัดหมาย</label>
+          <input type="date" id="targetDate" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label" style="font-size: 0.8rem;">อีเมลแจ้งเตือน</label>
+          <input type="email" id="targetEmail" class="form-control form-control-sm" placeholder="เช่น a@mail.com">
+        </div>
+      </div>
+      <button onclick="addNote()" id="addBtn" class="btn btn-primary w-100">บันทึกงานใหม่</button>
+    </div>
+
+    <!-- รายการงาน -->
+    <div id="loading" class="text-center text-secondary my-3 hidden">กำลังโหลดข้อมูล...</div>
+    <div id="notesContainer" class="d-flex flex-column gap-2"></div>
+  </div>
+
+<script>
+  // ==========================================
+  // 🔴 นำ URL ของ Worker ที่ได้มาวางแทนที่ข้อความด้านล่างนี้
+  // ==========================================
+  const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
+  let currentPin = "";
+
+  async function callApi(payload) {
+    payload.pin = currentPin;
+    try {
+      let response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return await response.json();
+    } catch (error) {
+      alert("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+      return null;
+    }
+  }
+
+  async function verifyPin() {
+    currentPin = document.getElementById('pinInput').value;
+    if(!currentPin) return;
+    
+    let btn = document.getElementById('loginBtn');
+    btn.innerText = "กำลังตรวจสอบ..."; btn.disabled = true;
+    
+    let res = await callApi({ action: 'get' }); // ลองดึงข้อมูลเพื่อเทส PIN
+    
+    if(res && res.success !== false) {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboardScreen').classList.remove('hidden');
+      renderNotes(res.data);
+    } else {
+      document.getElementById('loginAlert').innerText = "รหัส PIN ไม่ถูกต้อง";
+      document.getElementById('loginAlert').classList.remove('hidden');
+      currentPin = "";
+    }
+    btn.innerText = "เข้าสู่ระบบ"; btn.disabled = false;
+  }
+
+  function renderNotes(notes) {
+    const container = document.getElementById('notesContainer');
+    if(!notes || notes.length === 0) {
+      container.innerHTML = `<div class="text-center text-muted mt-4">🎉 ไม่มีงานค้างในระบบแล้ว</div>`;
+      return;
+    }
+    
+    container.innerHTML = "";
+    notes.forEach(note => {
+      let emailBadge = note.target_email ? `<span class="badge bg-warning text-dark me-1">✉️ ${note.target_email}</span>` : '';
+      let dateBadge = note.target_date ? `<span class="badge bg-danger">📅 ${note.target_date}</span>` : '';
+      
+      let html = `
+        <div class="card p-3 task-card shadow-sm border-0" id="card-${note.id}">
+          <div class="d-flex align-items-start gap-3">
+            <input class="form-check-input fs-4 mt-1" type="checkbox" onchange="completeTask('${note.id}')">
+            <div class="flex-grow-1">
+              <p class="mb-1" style="white-space: pre-wrap;">${note.detail}</p>
+              <div class="mt-1" style="font-size: 0.8rem;">${emailBadge} ${dateBadge}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  async function addNote() {
+    let detail = document.getElementById('taskDetail').value;
+    let targetDate = document.getElementById('targetDate').value;
+    let targetEmail = document.getElementById('targetEmail').value;
+    
+    if(!detail.trim()) return alert("กรุณาใส่รายละเอียดงาน");
+    
+    let btn = document.getElementById('addBtn');
+    btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
+
+    let res = await callApi({
+      action: 'add',
+      detail: detail,
+      targetDate: targetDate,
+      targetEmail: targetEmail
+    });
+
+    if(res && res.success) {
+      document.getElementById('taskDetail').value = "";
+      document.getElementById('targetDate').value = "";
+      document.getElementById('targetEmail').value = "";
+      let refresh = await callApi({ action: 'get' });
+      renderNotes(refresh.data);
+    }
+    btn.innerText = "บันทึกงานใหม่"; btn.disabled = false;
+  }
+
+  async function completeTask(id) {
+    let card = document.getElementById(`card-${id}`);
+    card.classList.add('task-completed');
+    
+    let res = await callApi({ action: 'complete', id: id });
+    if(res && res.success) {
+      setTimeout(() => card.style.display = 'none', 400); // ซ่อนหลังจากติ๊กถูก
+    } else {
+      card.classList.remove('task-completed');
+      card.querySelector('input').checked = false;
+    }
+  }
+
+  function logout() {
+    currentPin = "";
+    document.getElementById('pinInput').value = "";
+    document.getElementById('dashboardScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+</script>
+</body>
+</html>
