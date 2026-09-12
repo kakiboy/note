@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Smart Note</title>
+  <!-- โหลด Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f7f6; font-family: 'Sarabun', sans-serif; }
@@ -14,7 +15,7 @@
 </head>
 <body>
 
-  <!-- หน้า Login -->
+  <!-- หน้า Login (ใส่ PIN) -->
   <div id="loginScreen" class="container d-flex flex-column justify-content-center align-items-center vh-100">
     <div class="card p-4 shadow-sm text-center" style="width: 100%; max-width: 350px;">
       <h3 class="mb-4">🔒 My Smart Note</h3>
@@ -24,14 +25,17 @@
     </div>
   </div>
 
-  <!-- หน้า Dashboard -->
+  <!-- หน้า Dashboard (ระบบจัดการ Note) -->
   <div id="dashboardScreen" class="container py-4 hidden" style="max-width: 600px;">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4>📝 รายการจดบันทึก</h4>
-      <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">⚙️ ตั้งค่า</button>
+        <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
+      </div>
     </div>
 
-    <!-- ฟอร์มเพิ่มงาน -->
+    <!-- ฟอร์มเพิ่มงานใหม่ -->
     <div class="card p-3 mb-4 shadow-sm border-primary">
       <textarea id="taskDetail" class="form-control mb-2" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
       <div class="row g-2 mb-2">
@@ -47,10 +51,41 @@
       <button onclick="addNote()" id="addBtn" class="btn btn-primary w-100">บันทึกงานใหม่</button>
     </div>
 
-    <!-- รายการงาน -->
+    <!-- รายการงาน (List) -->
     <div id="loading" class="text-center text-secondary my-3 hidden">กำลังโหลดข้อมูล...</div>
     <div id="notesContainer" class="d-flex flex-column gap-2"></div>
   </div>
+
+  <!-- Modal ตั้งค่าระบบ -->
+  <div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">⚙️ ตั้งค่าระบบ</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-4">
+            <label class="form-label text-secondary small mb-1">อีเมลแจ้งเตือนเริ่มต้น</label>
+            <div class="input-group">
+              <input type="email" id="defaultEmailSetting" class="form-control form-control-sm" placeholder="เช่น a@mail.com">
+              <button onclick="saveDefaultEmail()" class="btn btn-sm btn-secondary">บันทึก</button>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label text-secondary small mb-1">เปลี่ยนรหัส PIN ใหม่</label>
+            <div class="input-group">
+              <input type="password" id="newPinInput" class="form-control form-control-sm" placeholder="PIN ใหม่ 4-6 หลัก" maxlength="6">
+              <button onclick="changePin()" id="btnChangePin" class="btn btn-sm btn-danger">เปลี่ยนรหัส</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- โหลด Bootstrap 5 JS (จำเป็นสำหรับ Modal) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
   // ==========================================
@@ -59,6 +94,14 @@
   const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
   let currentPin = "";
 
+  // โหลดอีเมลที่เคยบันทึกไว้ขึ้นมาแสดงอัตโนมัติเมื่อเปิดหน้าเว็บ
+  document.addEventListener("DOMContentLoaded", () => {
+    let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
+    document.getElementById("targetEmail").value = savedEmail;
+    document.getElementById("defaultEmailSetting").value = savedEmail;
+  });
+
+  // ฟังก์ชันกลางสำหรับส่ง API
   async function callApi(payload) {
     payload.pin = currentPin;
     try {
@@ -74,6 +117,7 @@
     }
   }
 
+  // เข้าสู่ระบบ
   async function verifyPin() {
     currentPin = document.getElementById('pinInput').value;
     if(!currentPin) return;
@@ -81,7 +125,7 @@
     let btn = document.getElementById('loginBtn');
     btn.innerText = "กำลังตรวจสอบ..."; btn.disabled = true;
     
-    let res = await callApi({ action: 'get' }); // ลองดึงข้อมูลเพื่อเทส PIN
+    let res = await callApi({ action: 'get' }); 
     
     if(res && res.success !== false) {
       document.getElementById('loginScreen').classList.add('hidden');
@@ -95,6 +139,7 @@
     btn.innerText = "เข้าสู่ระบบ"; btn.disabled = false;
   }
 
+  // แสดงผลรายการ Note
   function renderNotes(notes) {
     const container = document.getElementById('notesContainer');
     if(!notes || notes.length === 0) {
@@ -122,6 +167,7 @@
     });
   }
 
+  // เพิ่มรายการใหม่
   async function addNote() {
     let detail = document.getElementById('taskDetail').value;
     let targetDate = document.getElementById('targetDate').value;
@@ -142,31 +188,65 @@
     if(res && res.success) {
       document.getElementById('taskDetail').value = "";
       document.getElementById('targetDate').value = "";
-      document.getElementById('targetEmail').value = "";
+      
+      let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
+      document.getElementById('targetEmail').value = savedEmail;
+      
       let refresh = await callApi({ action: 'get' });
       renderNotes(refresh.data);
     }
     btn.innerText = "บันทึกงานใหม่"; btn.disabled = false;
   }
 
+  // ติ๊กเครื่องหมายถูก (ซ่อนงาน)
   async function completeTask(id) {
     let card = document.getElementById(`card-${id}`);
     card.classList.add('task-completed');
     
     let res = await callApi({ action: 'complete', id: id });
     if(res && res.success) {
-      setTimeout(() => card.style.display = 'none', 400); // ซ่อนหลังจากติ๊กถูก
+      setTimeout(() => card.style.display = 'none', 400); 
     } else {
       card.classList.remove('task-completed');
       card.querySelector('input').checked = false;
     }
   }
 
+  // ล็อกเอาต์
   function logout() {
     currentPin = "";
     document.getElementById('pinInput').value = "";
     document.getElementById('dashboardScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
+  }
+
+  // บันทึกอีเมลเริ่มต้น
+  function saveDefaultEmail() {
+    let email = document.getElementById("defaultEmailSetting").value;
+    localStorage.setItem("defaultTargetEmail", email);
+    document.getElementById("targetEmail").value = email; 
+    alert("บันทึกอีเมลเริ่มต้นเรียบร้อยแล้ว");
+  }
+
+  // เปลี่ยนรหัส PIN
+  async function changePin() {
+    let newPin = document.getElementById("newPinInput").value;
+    if(newPin.length < 4) return alert("กรุณาตั้งรหัส PIN อย่างน้อย 4 หลัก");
+    
+    let btn = document.getElementById("btnChangePin");
+    btn.innerText = "กำลังเปลี่ยน..."; btn.disabled = true;
+
+    let res = await callApi({ action: 'changePin', newPin: newPin });
+    
+    if(res && res.success) {
+      alert("เปลี่ยนรหัส PIN สำเร็จ");
+      currentPin = newPin; 
+      bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+      document.getElementById("newPinInput").value = "";
+    } else {
+      alert("เกิดข้อผิดพลาด: " + (res ? res.message : "ไม่สามารถเปลี่ยนรหัสได้"));
+    }
+    btn.innerText = "เปลี่ยนรหัส"; btn.disabled = false;
   }
 </script>
 </body>
