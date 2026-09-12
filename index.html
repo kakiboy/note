@@ -14,7 +14,7 @@
 </head>
 <body>
 
-  <!-- หน้า Login (ใส่ PIN) -->
+  <!-- หน้า Login -->
   <div id="loginScreen" class="container d-flex flex-column justify-content-center align-items-center vh-100">
     <div class="card p-4 shadow-sm text-center" style="width: 100%; max-width: 350px;">
       <h3 class="mb-4">🔒 My Smart Note</h3>
@@ -24,17 +24,18 @@
     </div>
   </div>
 
-  <!-- หน้า Dashboard (ระบบจัดการ Note) -->
+  <!-- หน้า Dashboard -->
   <div id="dashboardScreen" class="container py-4 hidden" style="max-width: 600px;">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4>📝 รายการจดบันทึก</h4>
       <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-info" onclick="loadHistory()" data-bs-toggle="modal" data-bs-target="#historyModal">🗂️ ประวัติ</button>
         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">⚙️ ตั้งค่า</button>
         <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
       </div>
     </div>
 
-    <!-- ฟอร์มเพิ่มงานใหม่ -->
+    <!-- ฟอร์มเพิ่มงาน -->
     <div class="card p-3 mb-4 shadow-sm border-primary">
       <div class="input-group mb-2">
         <textarea id="taskDetail" class="form-control" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
@@ -55,9 +56,25 @@
       <button onclick="addNote()" id="addBtn" class="btn btn-primary w-100">บันทึกงานใหม่</button>
     </div>
 
-    <!-- รายการงาน (List) -->
+    <!-- รายการงานปัจจุบัน -->
     <div id="loading" class="text-center text-secondary my-3 hidden">กำลังโหลดข้อมูล...</div>
     <div id="notesContainer" class="d-flex flex-column gap-2"></div>
+  </div>
+
+  <!-- Modal ประวัติงานที่ทำเสร็จแล้ว -->
+  <div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">🗂️ ประวัติงานที่ทำเสร็จแล้ว</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="historyLoading" class="text-center text-secondary my-3 hidden">กำลังโหลดประวัติ...</div>
+          <div id="historyContainer" class="d-flex flex-column gap-2"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Modal ตั้งค่าระบบ -->
@@ -94,6 +111,27 @@
 <script>
   const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
   let currentPin = "";
+  let idleTimer;
+  const IDLE_TIMEOUT = 5 * 60 * 1000; // 5 นาที (หน่วยเป็นมิลลิวินาที)
+
+  // รีเซ็ตตัวจับเวลาเมื่อมีการขยับเมาส์ พิมพ์ หรือคลิก
+  function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    // เริ่มนับเวลาถอยหลังใหม่ เฉพาะตอนที่ล็อกอินเข้ามาแล้วเท่านั้น
+    if (!document.getElementById('dashboardScreen').classList.contains('hidden')) {
+      idleTimer = setTimeout(() => {
+        alert("ระบบได้ทำการล็อกเอาต์อัตโนมัติ เนื่องจากไม่มีการใช้งานเกิน 5 นาที");
+        logout();
+      }, IDLE_TIMEOUT);
+    }
+  }
+
+  // ดักจับเหตุการณ์เพื่อรีเซ็ตเวลา
+  window.onload = resetIdleTimer;
+  document.onmousemove = resetIdleTimer;
+  document.onkeypress = resetIdleTimer;
+  document.onclick = resetIdleTimer;
+  document.onscroll = resetIdleTimer;
 
   document.addEventListener("DOMContentLoaded", () => {
     let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
@@ -128,6 +166,7 @@
     if(res && res.success !== false) {
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('dashboardScreen').classList.remove('hidden');
+      resetIdleTimer(); // เริ่มจับเวลาล็อกเอาต์เมื่อเข้าสู่ระบบสำเร็จ
       renderNotes(res.data);
     } else {
       document.getElementById('loginAlert').innerText = "รหัส PIN ไม่ถูกต้อง";
@@ -207,11 +246,60 @@
     }
   }
 
+  // โหลดข้อมูลประวัติมาแสดง
+  async function loadHistory() {
+    document.getElementById('historyContainer').innerHTML = "";
+    document.getElementById('historyLoading').classList.remove('hidden');
+    
+    let res = await callApi({ action: 'getHistory' });
+    document.getElementById('historyLoading').classList.add('hidden');
+    
+    if(res && res.success) {
+      renderHistory(res.data);
+    }
+  }
+
+  // สร้าง UI สำหรับประวัติ
+  function renderHistory(notes) {
+    const container = document.getElementById('historyContainer');
+    if(!notes || notes.length === 0) {
+      container.innerHTML = `<div class="text-center text-muted my-3">ยังไม่มีประวัติการทำงาน</div>`;
+      return;
+    }
+    
+    notes.forEach(note => {
+      let dateBadge = note.target_date ? `<span class="badge bg-secondary">📅 ${note.target_date}</span>` : '';
+      let html = `
+        <div class="card p-2 shadow-sm border-0 bg-light text-muted">
+          <div class="d-flex align-items-start gap-2">
+            <span class="fs-5 text-success">✔️</span>
+            <div class="flex-grow-1">
+              <p class="mb-0" style="font-size: 0.9rem; text-decoration: line-through;">${note.detail}</p>
+              <div class="mt-1" style="font-size: 0.75rem;">${dateBadge}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
   function logout() {
     currentPin = "";
+    clearTimeout(idleTimer); // หยุดจับเวลาเมื่อล็อกเอาต์แล้ว
     document.getElementById('pinInput').value = "";
     document.getElementById('dashboardScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
+    
+    // ปิดป๊อปอัปทั้งหมดเผื่อเปิดค้างไว้
+    const modals = ['settingsModal', 'historyModal'];
+    modals.forEach(id => {
+      const modalEl = document.getElementById(id);
+      if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+    });
   }
 
   function saveDefaultEmail() {
@@ -241,7 +329,6 @@
     btn.innerText = "เปลี่ยนรหัส"; btn.disabled = false;
   }
 
-  // ระบบพิมพ์ด้วยเสียง
   function startDictation() {
     if (window.hasOwnProperty('webkitSpeechRecognition') || window.hasOwnProperty('SpeechRecognition')) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -272,7 +359,7 @@
         micBtn.innerHTML = '<span class="fs-4">🎤</span>';
       };
     } else {
-      alert("เบราว์เซอร์ของคุณไม่รองรับการพิมพ์ด้วยเสียง แนะนำให้ใช้งานผ่าน Google Chrome หรือ Safari");
+      alert("เบราว์เซอร์ของคุณไม่รองรับการพิมพ์ด้วยเสียง");
     }
   }
 </script>
