@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Smart Note</title>
-  <!-- โหลด Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background-color: #f4f7f6; font-family: 'Sarabun', sans-serif; }
@@ -37,7 +36,12 @@
 
     <!-- ฟอร์มเพิ่มงานใหม่ -->
     <div class="card p-3 mb-4 shadow-sm border-primary">
-      <textarea id="taskDetail" class="form-control mb-2" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
+      <div class="input-group mb-2">
+        <textarea id="taskDetail" class="form-control" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
+        <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center" type="button" id="micBtn" onclick="startDictation()" title="พูดเพื่อพิมพ์">
+          <span class="fs-4">🎤</span>
+        </button>
+      </div>
       <div class="row g-2 mb-2">
         <div class="col-6">
           <label class="form-label" style="font-size: 0.8rem;">วันที่นัดหมาย</label>
@@ -84,24 +88,19 @@
     </div>
   </div>
 
-  <!-- โหลด Bootstrap 5 JS (จำเป็นสำหรับ Modal) -->
+  <!-- โหลด Bootstrap 5 JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // ==========================================
-  // 🔴 นำ URL ของ Worker ที่ได้มาวางแทนที่ข้อความด้านล่างนี้
-  // ==========================================
   const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
   let currentPin = "";
 
-  // โหลดอีเมลที่เคยบันทึกไว้ขึ้นมาแสดงอัตโนมัติเมื่อเปิดหน้าเว็บ
   document.addEventListener("DOMContentLoaded", () => {
     let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
     document.getElementById("targetEmail").value = savedEmail;
     document.getElementById("defaultEmailSetting").value = savedEmail;
   });
 
-  // ฟังก์ชันกลางสำหรับส่ง API
   async function callApi(payload) {
     payload.pin = currentPin;
     try {
@@ -117,7 +116,6 @@
     }
   }
 
-  // เข้าสู่ระบบ
   async function verifyPin() {
     currentPin = document.getElementById('pinInput').value;
     if(!currentPin) return;
@@ -139,7 +137,6 @@
     btn.innerText = "เข้าสู่ระบบ"; btn.disabled = false;
   }
 
-  // แสดงผลรายการ Note
   function renderNotes(notes) {
     const container = document.getElementById('notesContainer');
     if(!notes || notes.length === 0) {
@@ -167,7 +164,6 @@
     });
   }
 
-  // เพิ่มรายการใหม่
   async function addNote() {
     let detail = document.getElementById('taskDetail').value;
     let targetDate = document.getElementById('targetDate').value;
@@ -198,7 +194,6 @@
     btn.innerText = "บันทึกงานใหม่"; btn.disabled = false;
   }
 
-  // ติ๊กเครื่องหมายถูก (ซ่อนงาน)
   async function completeTask(id) {
     let card = document.getElementById(`card-${id}`);
     card.classList.add('task-completed');
@@ -212,7 +207,6 @@
     }
   }
 
-  // ล็อกเอาต์
   function logout() {
     currentPin = "";
     document.getElementById('pinInput').value = "";
@@ -220,7 +214,6 @@
     document.getElementById('loginScreen').classList.remove('hidden');
   }
 
-  // บันทึกอีเมลเริ่มต้น
   function saveDefaultEmail() {
     let email = document.getElementById("defaultEmailSetting").value;
     localStorage.setItem("defaultTargetEmail", email);
@@ -228,7 +221,6 @@
     alert("บันทึกอีเมลเริ่มต้นเรียบร้อยแล้ว");
   }
 
-  // เปลี่ยนรหัส PIN
   async function changePin() {
     let newPin = document.getElementById("newPinInput").value;
     if(newPin.length < 4) return alert("กรุณาตั้งรหัส PIN อย่างน้อย 4 หลัก");
@@ -247,6 +239,41 @@
       alert("เกิดข้อผิดพลาด: " + (res ? res.message : "ไม่สามารถเปลี่ยนรหัสได้"));
     }
     btn.innerText = "เปลี่ยนรหัส"; btn.disabled = false;
+  }
+
+  // ระบบพิมพ์ด้วยเสียง
+  function startDictation() {
+    if (window.hasOwnProperty('webkitSpeechRecognition') || window.hasOwnProperty('SpeechRecognition')) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "th-TH";
+
+      const micBtn = document.getElementById('micBtn');
+      micBtn.innerHTML = '<span class="fs-4">🔴</span>';
+      
+      recognition.start();
+
+      recognition.onresult = function(e) {
+        let transcript = e.results[0][0].transcript;
+        let taskDetail = document.getElementById('taskDetail');
+        taskDetail.value += (taskDetail.value ? ' ' : '') + transcript;
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+
+      recognition.onerror = function(e) {
+        recognition.stop();
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+      
+      recognition.onend = function() {
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+    } else {
+      alert("เบราว์เซอร์ของคุณไม่รองรับการพิมพ์ด้วยเสียง แนะนำให้ใช้งานผ่าน Google Chrome หรือ Safari");
+    }
   }
 </script>
 </body>
