@@ -69,7 +69,17 @@
           <h5 class="modal-title">🗂️ ประวัติงานที่ทำเสร็จแล้ว</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body pt-2">
+          <!-- เพิ่มส่วน Dropdown สำหรับกรองข้อมูล -->
+          <div class="mb-3 d-flex justify-content-end">
+            <select id="historyFilter" class="form-select form-select-sm w-auto bg-light" onchange="applyHistoryFilter()">
+              <option value="all">ดูทั้งหมด</option>
+              <option value="today">เฉพาะวันนี้</option>
+              <option value="week">สัปดาห์นี้ (ย้อนหลัง 7 วัน)</option>
+              <option value="month">เดือนนี้</option>
+            </select>
+          </div>
+          
           <div id="historyLoading" class="text-center text-secondary my-3 hidden">กำลังโหลดประวัติ...</div>
           <div id="historyContainer" class="d-flex flex-column gap-2"></div>
         </div>
@@ -112,6 +122,7 @@
   const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
   let currentPin = "";
   let idleTimer;
+  let allHistoryNotes = []; // ตัวแปรเก็บข้อมูลประวัติทั้งหมดไว้ใช้กรอง
   const IDLE_TIMEOUT = 5 * 60 * 1000; 
 
   function resetIdleTimer() {
@@ -243,6 +254,7 @@
     }
   }
 
+  // โหลดประวัติใหม่มาเก็บไว้ และเรียกใช้ฟังก์ชันกรอง
   async function loadHistory() {
     document.getElementById('historyContainer').innerHTML = "";
     document.getElementById('historyLoading').classList.remove('hidden');
@@ -251,14 +263,46 @@
     document.getElementById('historyLoading').classList.add('hidden');
     
     if(res && res.success) {
-      renderHistory(res.data);
+      allHistoryNotes = res.data; 
+      document.getElementById('historyFilter').value = 'all'; // รีเซ็ตเป็นค่าเริ่มต้น
+      applyHistoryFilter(); // สั่งเรนเดอร์ผ่านฟังก์ชันกรอง
     }
+  }
+
+  // ฟังก์ชันตัวกรองประวัติ
+  function applyHistoryFilter() {
+    const filterValue = document.getElementById('historyFilter').value;
+    const now = new Date();
+    let filteredNotes = [];
+
+    if (filterValue === 'all') {
+      filteredNotes = allHistoryNotes;
+    } else {
+      filteredNotes = allHistoryNotes.filter(note => {
+        let noteDate = new Date(note.created_at + 'Z'); 
+        if (isNaN(noteDate)) return true; // ถ้าวันที่พังให้แสดงไว้ก่อน
+
+        if (filterValue === 'today') {
+          return noteDate.toDateString() === now.toDateString();
+        } 
+        else if (filterValue === 'week') {
+          let diffTime = Math.abs(now - noteDate);
+          let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return diffDays <= 7;
+        } 
+        else if (filterValue === 'month') {
+          return noteDate.getMonth() === now.getMonth() && noteDate.getFullYear() === now.getFullYear();
+        }
+      });
+    }
+
+    renderHistory(filteredNotes);
   }
 
   function renderHistory(notes) {
     const container = document.getElementById('historyContainer');
     if(!notes || notes.length === 0) {
-      container.innerHTML = `<div class="text-center text-muted my-3">ยังไม่มีประวัติการทำงาน</div>`;
+      container.innerHTML = `<div class="text-center text-muted my-3">ไม่มีรายการในหมวดหมู่นี้</div>`;
       return;
     }
     
@@ -303,7 +347,11 @@
       if (card) {
         card.style.transition = "opacity 0.3s ease";
         card.style.opacity = "0";
-        setTimeout(() => card.remove(), 300);
+        setTimeout(() => {
+          card.remove();
+          // อัปเดตตัวแปร global ด้วย เพื่อไม่ให้รายการที่ลบกลับมาตอนเปลี่ยนหมวด
+          allHistoryNotes = allHistoryNotes.filter(n => n.id !== id); 
+        }, 300);
       }
     } else {
       alert("เกิดข้อผิดพลาด ไม่สามารถลบข้อมูลได้");
