@@ -109,13 +109,11 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // URL ของ API ที่เชื่อมกับ Cloudflare Worker
   const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
   let currentPin = "";
   let idleTimer;
-  const IDLE_TIMEOUT = 5 * 60 * 1000; // ตั้งเวลา 5 นาที (หน่วยมิลลิวินาที)
+  const IDLE_TIMEOUT = 5 * 60 * 1000; 
 
-  // รีเซ็ตตัวจับเวลาเมื่อมีการเคลื่อนไหว
   function resetIdleTimer() {
     clearTimeout(idleTimer);
     if (!document.getElementById('dashboardScreen').classList.contains('hidden')) {
@@ -245,7 +243,6 @@
     }
   }
 
-  // โหลดและแสดงประวัติงานที่ทำเสร็จแล้ว (แบบใหม่)
   async function loadHistory() {
     document.getElementById('historyContainer').innerHTML = "";
     document.getElementById('historyLoading').classList.remove('hidden');
@@ -267,7 +264,6 @@
     
     container.innerHTML = "";
     notes.forEach(note => {
-      // จัดรูปแบบวันที่และเวลา
       let createdDate = new Date(note.created_at + 'Z'); 
       let timeString = isNaN(createdDate) ? note.created_at : createdDate.toLocaleString('th-TH', { 
         year: 'numeric', month: 'short', day: 'numeric', 
@@ -277,21 +273,41 @@
       let dateBadge = note.target_date ? `<span class="badge bg-secondary me-1">🎯 กำหนด: ${note.target_date}</span>` : '';
       
       let html = `
-        <div class="card p-2 shadow-sm border-0 mb-2 bg-white" style="border-left: 4px solid #198754 !important;">
-          <div class="d-flex align-items-start gap-2">
-            <span class="fs-5 text-success">✔️</span>
-            <div class="flex-grow-1">
-              <p class="mb-1 text-dark fw-medium" style="font-size: 0.95rem;">${note.detail}</p>
-              <div class="mt-1" style="font-size: 0.8rem;">
-                ${dateBadge}
-                <span class="badge bg-info text-dark">🕒 ${timeString}</span>
+        <div class="card p-2 shadow-sm border-0 mb-2 bg-white" style="border-left: 4px solid #198754 !important;" id="history-${note.id}">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="d-flex align-items-start gap-2 flex-grow-1">
+              <span class="fs-5 text-success">✔️</span>
+              <div>
+                <p class="mb-1 text-dark fw-medium" style="font-size: 0.95rem;">${note.detail}</p>
+                <div class="mt-1" style="font-size: 0.8rem;">
+                  ${dateBadge}
+                  <span class="badge bg-info text-dark">🕒 ${timeString}</span>
+                </div>
               </div>
             </div>
+            <button onclick="deleteHistory('${note.id}')" class="btn btn-sm text-danger px-2 border-0" title="ลบข้อมูลนี้ทิ้งถาวร">🗑️</button>
           </div>
         </div>
       `;
       container.insertAdjacentHTML('beforeend', html);
     });
+  }
+
+  async function deleteHistory(id) {
+    if (!confirm("คุณต้องการลบข้อมูลนี้อย่างถาวรใช่หรือไม่?")) return;
+    
+    let res = await callApi({ action: 'delete', id: id });
+    
+    if (res && res.success) {
+      let card = document.getElementById(`history-${id}`);
+      if (card) {
+        card.style.transition = "opacity 0.3s ease";
+        card.style.opacity = "0";
+        setTimeout(() => card.remove(), 300);
+      }
+    } else {
+      alert("เกิดข้อผิดพลาด ไม่สามารถลบข้อมูลได้");
+    }
   }
 
   function logout() {
@@ -301,7 +317,6 @@
     document.getElementById('dashboardScreen').classList.add('hidden');
     document.getElementById('loginScreen').classList.remove('hidden');
     
-    // ปิดหน้าต่าง Modal ทั้งหมด
     const modals = ['settingsModal', 'historyModal'];
     modals.forEach(id => {
       const modalEl = document.getElementById(id);
