@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Smart Note</title>
+  
+  <!-- ตั้งค่าสำหรับการเป็น PWA (ติดตั้งเป็นแอป) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0d6efd">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f7f6; font-family: 'Sarabun', sans-serif; }
+    .hidden { display: none !important; }
+    .task-card { transition: all 0.3s ease; }
+    .task-completed { text-decoration: line-through; opacity: 0.5; }
+  </style>
+</head>
+<body>
+
+  <!-- หน้า Login -->
+  <div id="loginScreen" class="container d-flex flex-column justify-content-center align-items-center vh-100">
+    <div class="card p-4 shadow-sm text-center" style="width: 100%; max-width: 350px;">
+      <h3 class="mb-4">🔒 My Smart Note</h3>
+      <input type="password" id="pinInput" class="form-control text-center fs-3 mb-3" placeholder="ระบุ PIN" maxlength="6">
+      <button onclick="verifyPin()" id="loginBtn" class="btn btn-primary w-100 fs-5">เข้าสู่ระบบ</button>
+      <div id="loginAlert" class="text-danger mt-2 hidden"></div>
+    </div>
+  </div>
+
+  <!-- หน้า Dashboard -->
+  <div id="dashboardScreen" class="container py-4 hidden" style="max-width: 600px;">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4>📝 รายการจดบันทึก</h4>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-info" onclick="loadHistory()" data-bs-toggle="modal" data-bs-target="#historyModal">🗂️ ประวัติ</button>
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">⚙️ ตั้งค่า</button>
+        <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
+      </div>
+    </div>
+
+    <!-- ฟอร์มเพิ่มงาน -->
+    <div class="card p-3 mb-4 shadow-sm border-primary">
+      <div class="input-group mb-2">
+        <textarea id="taskDetail" class="form-control" rows="2" placeholder="วันนี้ต้องทำอะไร?"></textarea>
+        <button class="btn btn-outline-secondary d-flex align-items-center justify-content-center" type="button" id="micBtn" onclick="startDictation()" title="พูดเพื่อพิมพ์">
+          <span class="fs-4">🎤</span>
+        </button>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label" style="font-size: 0.8rem;">วันที่นัดหมาย</label>
+          <input type="date" id="targetDate" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label" style="font-size: 0.8rem;">อีเมลแจ้งเตือน</label>
+          <input type="email" id="targetEmail" class="form-control form-control-sm" placeholder="เช่น a@mail.com">
+        </div>
+      </div>
+      <button onclick="addNote()" id="addBtn" class="btn btn-primary w-100">บันทึกงานใหม่</button>
+    </div>
+
+    <!-- รายการงานปัจจุบัน -->
+    <div id="loading" class="text-center text-secondary my-3 hidden">กำลังโหลดข้อมูล...</div>
+    <div id="notesContainer" class="d-flex flex-column gap-2"></div>
+  </div>
+
+  <!-- Modal ประวัติงานที่ทำเสร็จแล้ว -->
+  <div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">🗂️ ประวัติงานที่ทำเสร็จแล้ว</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <!-- Dropdown สำหรับกรองข้อมูล -->
+          <div class="mb-3 d-flex justify-content-end">
+            <select id="historyFilter" class="form-select form-select-sm w-auto bg-light" onchange="applyHistoryFilter()">
+              <option value="all">ดูทั้งหมด</option>
+              <option value="today">เฉพาะวันนี้</option>
+              <option value="week">สัปดาห์นี้ (ย้อนหลัง 7 วัน)</option>
+              <option value="month">เดือนนี้</option>
+            </select>
+          </div>
+          
+          <div id="historyLoading" class="text-center text-secondary my-3 hidden">กำลังโหลดประวัติ...</div>
+          <div id="historyContainer" class="d-flex flex-column gap-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ตั้งค่าระบบ -->
+  <div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title">⚙️ ตั้งค่าระบบ</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-4">
+            <label class="form-label text-secondary small mb-1">อีเมลแจ้งเตือนเริ่มต้น</label>
+            <div class="input-group">
+              <input type="email" id="defaultEmailSetting" class="form-control form-control-sm" placeholder="เช่น a@mail.com">
+              <button onclick="saveDefaultEmail()" class="btn btn-sm btn-secondary">บันทึก</button>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label text-secondary small mb-1">เปลี่ยนรหัส PIN ใหม่</label>
+            <div class="input-group">
+              <input type="password" id="newPinInput" class="form-control form-control-sm" placeholder="PIN ใหม่ 4-6 หลัก" maxlength="6">
+              <button onclick="changePin()" id="btnChangePin" class="btn btn-sm btn-danger">เปลี่ยนรหัส</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- โหลด Bootstrap 5 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  const API_URL = "https://smart-note-api.wiroj11keng.workers.dev/"; 
+  let currentPin = "";
+  let idleTimer;
+  let allHistoryNotes = []; 
+  const IDLE_TIMEOUT = 5 * 60 * 1000; 
+
+  function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    if (!document.getElementById('dashboardScreen').classList.contains('hidden')) {
+      idleTimer = setTimeout(() => {
+        alert("ระบบได้ทำการล็อกเอาต์อัตโนมัติ เนื่องจากไม่มีการใช้งานเกิน 5 นาที");
+        logout();
+      }, IDLE_TIMEOUT);
+    }
+  }
+
+  window.onload = resetIdleTimer;
+  document.onmousemove = resetIdleTimer;
+  document.onkeypress = resetIdleTimer;
+  document.onclick = resetIdleTimer;
+  document.onscroll = resetIdleTimer;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
+    document.getElementById("targetEmail").value = savedEmail;
+    document.getElementById("defaultEmailSetting").value = savedEmail;
+  });
+
+  async function callApi(payload) {
+    payload.pin = currentPin;
+    try {
+      let response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      return await response.json();
+    } catch (error) {
+      alert("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+      return null;
+    }
+  }
+
+  async function verifyPin() {
+    currentPin = document.getElementById('pinInput').value;
+    if(!currentPin) return;
+    
+    let btn = document.getElementById('loginBtn');
+    btn.innerText = "กำลังตรวจสอบ..."; btn.disabled = true;
+    
+    let res = await callApi({ action: 'get' }); 
+    
+    if(res && res.success !== false) {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboardScreen').classList.remove('hidden');
+      resetIdleTimer();
+      renderNotes(res.data);
+    } else {
+      document.getElementById('loginAlert').innerText = "รหัส PIN ไม่ถูกต้อง";
+      document.getElementById('loginAlert').classList.remove('hidden');
+      currentPin = "";
+    }
+    btn.innerText = "เข้าสู่ระบบ"; btn.disabled = false;
+  }
+
+  function renderNotes(notes) {
+    const container = document.getElementById('notesContainer');
+    if(!notes || notes.length === 0) {
+      container.innerHTML = `<div class="text-center text-muted mt-4">🎉 ไม่มีงานค้างในระบบแล้ว</div>`;
+      return;
+    }
+    
+    container.innerHTML = "";
+    notes.forEach(note => {
+      let emailBadge = note.target_email ? `<span class="badge bg-warning text-dark me-1">✉️ ${note.target_email}</span>` : '';
+      let dateBadge = note.target_date ? `<span class="badge bg-danger">📅 ${note.target_date}</span>` : '';
+      
+      let html = `
+        <div class="card p-3 task-card shadow-sm border-0" id="card-${note.id}">
+          <div class="d-flex align-items-start gap-3">
+            <input class="form-check-input fs-4 mt-1" type="checkbox" onchange="completeTask('${note.id}')">
+            <div class="flex-grow-1">
+              <p class="mb-1" style="white-space: pre-wrap;">${note.detail}</p>
+              <div class="mt-1" style="font-size: 0.8rem;">${emailBadge} ${dateBadge}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  async function addNote() {
+    let detail = document.getElementById('taskDetail').value;
+    let targetDate = document.getElementById('targetDate').value;
+    let targetEmail = document.getElementById('targetEmail').value;
+    
+    if(!detail.trim()) return alert("กรุณาใส่รายละเอียดงาน");
+    
+    let btn = document.getElementById('addBtn');
+    btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
+
+    let res = await callApi({
+      action: 'add',
+      detail: detail,
+      targetDate: targetDate,
+      targetEmail: targetEmail
+    });
+
+    if(res && res.success) {
+      document.getElementById('taskDetail').value = "";
+      document.getElementById('targetDate').value = "";
+      
+      let savedEmail = localStorage.getItem("defaultTargetEmail") || "";
+      document.getElementById('targetEmail').value = savedEmail;
+      
+      let refresh = await callApi({ action: 'get' });
+      renderNotes(refresh.data);
+    }
+    btn.innerText = "บันทึกงานใหม่"; btn.disabled = false;
+  }
+
+  async function completeTask(id) {
+    let card = document.getElementById(`card-${id}`);
+    card.classList.add('task-completed');
+    
+    let res = await callApi({ action: 'complete', id: id });
+    if(res && res.success) {
+      setTimeout(() => card.style.display = 'none', 400); 
+    } else {
+      card.classList.remove('task-completed');
+      card.querySelector('input').checked = false;
+    }
+  }
+
+  async function loadHistory() {
+    document.getElementById('historyContainer').innerHTML = "";
+    document.getElementById('historyLoading').classList.remove('hidden');
+    
+    let res = await callApi({ action: 'getHistory' });
+    document.getElementById('historyLoading').classList.add('hidden');
+    
+    if(res && res.success) {
+      allHistoryNotes = res.data; 
+      document.getElementById('historyFilter').value = 'all';
+      applyHistoryFilter(); 
+    }
+  }
+
+  function applyHistoryFilter() {
+    const filterValue = document.getElementById('historyFilter').value;
+    const now = new Date();
+    let filteredNotes = [];
+
+    if (filterValue === 'all') {
+      filteredNotes = allHistoryNotes;
+    } else {
+      filteredNotes = allHistoryNotes.filter(note => {
+        let noteDate = new Date(note.created_at + 'Z'); 
+        if (isNaN(noteDate)) return true;
+
+        if (filterValue === 'today') {
+          return noteDate.toDateString() === now.toDateString();
+        } 
+        else if (filterValue === 'week') {
+          let diffTime = Math.abs(now - noteDate);
+          let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return diffDays <= 7;
+        } 
+        else if (filterValue === 'month') {
+          return noteDate.getMonth() === now.getMonth() && noteDate.getFullYear() === now.getFullYear();
+        }
+      });
+    }
+
+    renderHistory(filteredNotes);
+  }
+
+  function renderHistory(notes) {
+    const container = document.getElementById('historyContainer');
+    if(!notes || notes.length === 0) {
+      container.innerHTML = `<div class="text-center text-muted my-3">ไม่มีรายการในหมวดหมู่นี้</div>`;
+      return;
+    }
+    
+    container.innerHTML = "";
+    notes.forEach(note => {
+      let createdDate = new Date(note.created_at + 'Z'); 
+      let timeString = isNaN(createdDate) ? note.created_at : createdDate.toLocaleString('th-TH', { 
+        year: 'numeric', month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit' 
+      });
+
+      let dateBadge = note.target_date ? `<span class="badge bg-secondary me-1">🎯 กำหนด: ${note.target_date}</span>` : '';
+      
+      let html = `
+        <div class="card p-2 shadow-sm border-0 mb-2 bg-white" style="border-left: 4px solid #198754 !important;" id="history-${note.id}">
+          <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="d-flex align-items-start gap-2 flex-grow-1">
+              <span class="fs-5 text-success">✔️</span>
+              <div>
+                <p class="mb-1 text-dark fw-medium" style="font-size: 0.95rem;">${note.detail}</p>
+                <div class="mt-1" style="font-size: 0.8rem;">
+                  ${dateBadge}
+                  <span class="badge bg-info text-dark">🕒 ${timeString}</span>
+                </div>
+              </div>
+            </div>
+            <button onclick="deleteHistory('${note.id}')" class="btn btn-sm text-danger px-2 border-0" title="ลบข้อมูลนี้ทิ้งถาวร">🗑️</button>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  async function deleteHistory(id) {
+    if (!confirm("คุณต้องการลบข้อมูลนี้อย่างถาวรใช่หรือไม่?")) return;
+    
+    let res = await callApi({ action: 'delete', id: id });
+    
+    if (res && res.success) {
+      let card = document.getElementById(`history-${id}`);
+      if (card) {
+        card.style.transition = "opacity 0.3s ease";
+        card.style.opacity = "0";
+        setTimeout(() => {
+          card.remove();
+          allHistoryNotes = allHistoryNotes.filter(n => n.id !== id); 
+        }, 300);
+      }
+    } else {
+      alert("เกิดข้อผิดพลาด ไม่สามารถลบข้อมูลได้");
+    }
+  }
+
+  function logout() {
+    currentPin = "";
+    clearTimeout(idleTimer); 
+    document.getElementById('pinInput').value = "";
+    document.getElementById('dashboardScreen').classList.add('hidden');
+    document.getElementById('loginScreen').classList.remove('hidden');
+    
+    const modals = ['settingsModal', 'historyModal'];
+    modals.forEach(id => {
+      const modalEl = document.getElementById(id);
+      if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      }
+    });
+  }
+
+  function saveDefaultEmail() {
+    let email = document.getElementById("defaultEmailSetting").value;
+    localStorage.setItem("defaultTargetEmail", email);
+    document.getElementById("targetEmail").value = email; 
+    alert("บันทึกอีเมลเริ่มต้นเรียบร้อยแล้ว");
+  }
+
+  async function changePin() {
+    let newPin = document.getElementById("newPinInput").value;
+    if(newPin.length < 4) return alert("กรุณาตั้งรหัส PIN อย่างน้อย 4 หลัก");
+    
+    let btn = document.getElementById("btnChangePin");
+    btn.innerText = "กำลังเปลี่ยน..."; btn.disabled = true;
+
+    let res = await callApi({ action: 'changePin', newPin: newPin });
+    
+    if(res && res.success) {
+      alert("เปลี่ยนรหัส PIN สำเร็จ");
+      currentPin = newPin; 
+      bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+      document.getElementById("newPinInput").value = "";
+    } else {
+      alert("เกิดข้อผิดพลาด: " + (res ? res.message : "ไม่สามารถเปลี่ยนรหัสได้"));
+    }
+    btn.innerText = "เปลี่ยนรหัส"; btn.disabled = false;
+  }
+
+  function startDictation() {
+    if (window.hasOwnProperty('webkitSpeechRecognition') || window.hasOwnProperty('SpeechRecognition')) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "th-TH";
+
+      const micBtn = document.getElementById('micBtn');
+      micBtn.innerHTML = '<span class="fs-4">🔴</span>';
+      
+      recognition.start();
+
+      recognition.onresult = function(e) {
+        let transcript = e.results[0][0].transcript;
+        let taskDetail = document.getElementById('taskDetail');
+        taskDetail.value += (taskDetail.value ? ' ' : '') + transcript;
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+
+      recognition.onerror = function(e) {
+        recognition.stop();
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+      
+      recognition.onend = function() {
+        micBtn.innerHTML = '<span class="fs-4">🎤</span>';
+      };
+    } else {
+      alert("เบราว์เซอร์ของคุณไม่รองรับการพิมพ์ด้วยเสียง");
+    }
+  }
+</script>
+
+<!-- สคริปต์ลงทะเบียน Service Worker สำหรับ PWA -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('Service Worker ลงทะเบียนสำเร็จ'))
+        .catch(err => console.log('Service Worker ลงทะเบียนไม่สำเร็จ:', err));
+    });
+  }
+</script>
+
+</body>
+</html>
