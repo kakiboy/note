@@ -10,6 +10,10 @@
   <meta name="theme-color" content="#0d6efd">
   
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- เพิ่ม Library สำหรับแปลง HTML เป็นรูปภาพ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
   <style>
     body { background-color: #f4f7f6; font-family: 'Sarabun', sans-serif; }
     .hidden { display: none !important; }
@@ -31,9 +35,12 @@
 
   <!-- หน้า Dashboard -->
   <div id="dashboardScreen" class="container py-4 hidden" style="max-width: 600px;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4>📝 รายการจดบันทึก</h4>
-      <div class="d-flex gap-2">
+    
+    <!-- แก้ไขแถบเมนูด้านบน ให้รองรับหน้าจอมือถือและการเรียงปุ่ม -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+      <h4 class="m-0">📝 รายการจดบันทึก</h4>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-success" onclick="exportToImage()">📸 เซฟรูป</button>
         <button class="btn btn-sm btn-outline-info" onclick="loadHistory()" data-bs-toggle="modal" data-bs-target="#historyModal">🗂️ ประวัติ</button>
         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#settingsModal">⚙️ ตั้งค่า</button>
         <button onclick="logout()" class="btn btn-sm btn-outline-danger">ล็อกเอาต์</button>
@@ -70,9 +77,11 @@
   <div class="modal fade" id="historyModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title">🗂️ ประวัติงานที่ทำเสร็จแล้ว</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-header border-0 pb-0 d-flex align-items-center">
+          <h5 class="modal-title w-100">🗂️ ประวัติงานที่ทำเสร็จ</h5>
+          <!-- ปุ่มเซฟรูปประวัติ -->
+          <button type="button" class="btn btn-sm btn-outline-success flex-shrink-0 me-2" onclick="exportHistoryToImage()">📸 เซฟรูป</button>
+          <button type="button" class="btn-close flex-shrink-0" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body pt-2">
           <!-- Dropdown สำหรับกรองข้อมูล -->
@@ -192,7 +201,7 @@
   function renderNotes(notes) {
     const container = document.getElementById('notesContainer');
     if(!notes || notes.length === 0) {
-      container.innerHTML = `<div class="text-center text-muted mt-4">🎉 ไม่มีงานค้างในระบบแล้ว</div>`;
+      container.innerHTML = `<div class="text-center text-muted mt-4 p-3 bg-white rounded shadow-sm border border-light">🎉 ไม่มีงานค้างในระบบแล้ว</div>`;
       return;
     }
     
@@ -305,7 +314,7 @@
   function renderHistory(notes) {
     const container = document.getElementById('historyContainer');
     if(!notes || notes.length === 0) {
-      container.innerHTML = `<div class="text-center text-muted my-3">ไม่มีรายการในหมวดหมู่นี้</div>`;
+      container.innerHTML = `<div class="text-center text-muted my-3 p-3 bg-white rounded shadow-sm">ไม่มีรายการในหมวดหมู่นี้</div>`;
       return;
     }
     
@@ -332,7 +341,7 @@
                 </div>
               </div>
             </div>
-            <button onclick="deleteHistory('${note.id}')" class="btn btn-sm text-danger px-2 border-0" title="ลบข้อมูลนี้ทิ้งถาวร">🗑️</button>
+            <button onclick="deleteHistory('${note.id}')" class="btn btn-sm text-danger px-2 border-0 btn-delete-history" title="ลบข้อมูลนี้ทิ้งถาวร">🗑️</button>
           </div>
         </div>
       `;
@@ -436,6 +445,90 @@
     } else {
       alert("เบราว์เซอร์ของคุณไม่รองรับการพิมพ์ด้วยเสียง");
     }
+  }
+
+  // --- ฟังก์ชันใหม่: แปลงรายการงานปัจจุบันเป็นรูปภาพ ---
+  function exportToImage() {
+    const container = document.getElementById('notesContainer');
+    if (!container.innerHTML || container.innerText.includes("ไม่มีงานค้าง")) {
+       return alert("ยังไม่มีข้อมูลงานให้บันทึกรูปภาพครับ");
+    }
+    
+    // ตกแต่งพื้นหลังให้สวยงามก่อนถ่ายภาพ
+    const originalBg = container.style.backgroundColor;
+    container.style.backgroundColor = '#e9ecef';
+    container.style.padding = '15px';
+    container.style.borderRadius = '10px';
+    
+    // ใส่หัวข้อชั่วคราว
+    const header = document.createElement('div');
+    header.innerHTML = '<h5 class="text-center text-primary fw-bold mb-3">📝 งานที่ต้องทำ (My Smart Note)</h5>';
+    container.insertBefore(header, container.firstChild);
+    
+    let btn = document.querySelector('button[onclick="exportToImage()"]');
+    let oldText = btn.innerText;
+    btn.innerText = "กำลังสร้างรูป..."; btn.disabled = true;
+
+    // ทำการถ่ายภาพ
+    html2canvas(container, { scale: 2, backgroundColor: null }).then(canvas => {
+      // คืนค่ารูปแบบเดิม
+      container.removeChild(header);
+      container.style.backgroundColor = originalBg;
+      container.style.padding = '0';
+      btn.innerText = oldText; btn.disabled = false;
+      
+      // สั่งดาวน์โหลดลงเครื่อง
+      let link = document.createElement('a');
+      link.download = `SmartNote_Tasks_${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+  }
+
+  // --- ฟังก์ชันใหม่: แปลงประวัติงานสำเร็จเป็นรูปภาพ ---
+  function exportHistoryToImage() {
+    const container = document.getElementById('historyContainer');
+    if (!container.innerHTML || container.innerText.includes("ไม่มีรายการ")) {
+       return alert("ยังไม่มีประวัติให้บันทึกรูปภาพครับ");
+    }
+
+    // ตกแต่งพื้นหลัง
+    const originalBg = container.style.backgroundColor;
+    container.style.backgroundColor = '#e9ecef';
+    container.style.padding = '15px';
+    container.style.borderRadius = '10px';
+    
+    // ดึงข้อความจากตัวกรองมาตั้งเป็นชื่อหัวข้อ
+    let filterDropdown = document.getElementById('historyFilter');
+    let filterText = filterDropdown.options[filterDropdown.selectedIndex].text;
+    
+    const header = document.createElement('div');
+    header.innerHTML = `<h5 class="text-center text-success fw-bold mb-3">✅ สรุปงานที่ทำสำเร็จ (${filterText})</h5>`;
+    container.insertBefore(header, container.firstChild);
+    
+    // ซ่อนปุ่มถังขยะชั่วคราว ตอนถ่ายรูปจะได้ดูสวยงาม
+    const trashBtns = container.querySelectorAll('.btn-delete-history');
+    trashBtns.forEach(btn => btn.style.display = 'none');
+
+    let btn = document.querySelector('button[onclick="exportHistoryToImage()"]');
+    let oldText = btn.innerText;
+    btn.innerText = "กำลังสร้างรูป..."; btn.disabled = true;
+
+    // ทำการถ่ายภาพ
+    html2canvas(container, { scale: 2, backgroundColor: null }).then(canvas => {
+      // คืนค่ารูปแบบเดิม
+      container.removeChild(header);
+      container.style.backgroundColor = originalBg;
+      container.style.padding = '0';
+      trashBtns.forEach(btn => btn.style.display = 'block'); // แสดงปุ่มถังขยะกลับมา
+      btn.innerText = oldText; btn.disabled = false;
+      
+      // สั่งดาวน์โหลดลงเครื่อง
+      let link = document.createElement('a');
+      link.download = `SmartNote_Report_${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
   }
 </script>
 
